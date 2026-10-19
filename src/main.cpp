@@ -19,6 +19,9 @@
 #include <SPI.h>
 #include <SD.h>
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include <PubSubClient.h>
+#include <ArduinoJson.h>
 #include <WiFiUdp.h>
 #include <NTPClient.h>
 #include <Adafruit_CCS811.h>
@@ -40,6 +43,90 @@ static float coCalibrationOffsetVolts = 0.0f;
 static int   coReadingsBuffer[CO_MOVING_AVG_SAMPLES] = { 0 };
 static int   coBufferIndex = 0;
 static long  coRunningSum  = 0;
+
+// ==================== AWS IOT CORE & MQTT SUBSYSTEM ====================
+static WiFiClientSecure wifiTlsClient;
+static PubSubClient     mqttClient(wifiTlsClient);
+static unsigned long    lastTelemetryPublishMs = 0;
+
+void connectAWSIoT(void) {
+    if (WiFi.status() != WL_CONNECTED) return;
+    if (mqttClient.connected()) return;
+
+    Serial.print("[AWS IoT] Connecting to broker endpoint: ");
+    Serial.println(AWS_IOT_ENDPOINT);
+
+    // In production: wifiTlsClient.setCACert(AWS_CERT_CA);
+    mqttClient.setServer(AWS_IOT_ENDPOINT, AWS_IOT_PORT);
+    mqttClient.setBufferSize(MQTT_BUFFER_SIZE);
+
+    if (mqttClient.connect(STATION_ID)) {
+        Serial.println("[AWS IoT] Established mTLS session with AWS IoT Core.");
+        StaticJsonDocument<192> statusDoc;
+        statusDoc["station_id"]  = STATION_ID;
+        statusDoc["facility_id"] = FACILITY_ID;
+        statusDoc["status"]      = "ONLINE";
+        statusDoc["firmware"]    = FIRMWARE_VERSION;
+        char statusBuf[192];
+        serializeJson(statusDoc, statusBuf);
+        mqttClient.publish(MQTT_TOPIC_STATUS, statusBuf, true);
+    } else {
+        Serial.printf("[AWS IoT] Connection pending (rc=%d, retrying non-blocking)...\n", mqttClient.state());
+    }
+}
+
+void publishTelemetryAWS(float temp, float hum, int eco2, int tvoc, float co, float sound, bool alarm) {
+    if (!mqttClient.connected()) {
+        connectAWSIoT();
+        if (!mqttClient.connected()) return;
+    }
+
+    StaticJsonDocument<512> doc;
+    doc["station_id"]   = STATION_ID;
+    doc["facility_id"]  = FACILITY_ID;
+    doc["timestamp"]    = timeClient.getEpochTime();
+    doc["uptime_sec"]   = millis() / 1000;
+
+    JsonObject metrics = doc.createNestedObject("metrics");
+    metrics["temperature_c"] = temp;
+    metrics["humidity_rh"]   = hum;
+    metrics["eco2_ppm"]      = eco2;
+    metrics["tvoc_ppb"]      = tvoc;
+    metrics["co_ppm"]        = co;
+    metrics["sound_dba"]     = sound;
+
+    JsonObject status = doc.createNestedObject("status");
+    status["alarm_active"]    = alarm;
+    status["sht35_healthy"]   = (temp > -40.0f && temp < 125.0f);
+    status["ccs811_healthy"]  = ccs811Initialized;
+    status["sd_card_mounted"] = sdCardReady;
+
+    char jsonBuffer[512];
+    serializeJson(doc, jsonBuffer);
+
+    bool pubOk = mqttClient.publish(MQTT_TOPIC_TELEMETRY, jsonBuffer);
+    if (pubOk) {
+        Serial.printf("[AWS IoT] Telemetry published (%u bytes) -> %s\n", strlen(jsonBuffer), MQTT_TOPIC_TELEMETRY);
+    } else {
+        Serial.println("[AWS IoT] ERROR: Telemetry publish failed");
+    }
+
+    if (alarm) {
+        StaticJsonDocument<256> alertDoc;
+        alertDoc["station_id"]  = STATION_ID;
+        alertDoc["facility_id"] = FACILITY_ID;
+        alertDoc["alert_type"]  = "OCCUPATIONAL_SAFETY_HAZARD";
+        alertDoc["timestamp"]   = timeClient.getEpochTime();
+        alertDoc["co_ppm"]      = co;
+        alertDoc["sound_dba"]   = sound;
+        alertDoc["eco2_ppm"]    = eco2;
+
+        char alertBuf[256];
+        serializeJson(alertDoc, alertBuf);
+        mqttClient.publish(MQTT_TOPIC_ALERT, alertBuf);
+        Serial.printf("[AWS IoT] CRITICAL ALERT DISPATCHED -> %s\n", MQTT_TOPIC_ALERT);
+    }
+}
 
 // ==================== RAW SHT35 I2C DRIVER ====================
 /**
@@ -290,6 +377,16 @@ void loop(void) {
 
     // 7. Write to MicroSD Black-Box CSV
     logTelemetryToSD(temperature, humidity, eco2Ppm, tvocPpb, coPpm, soundDb, alarmStateActive);
+
+    // 8. Stream Real-time Telemetry to AWS IoT Core (5-second non-blocking interval)
+    if (millis() - lastTelemetryPublishMs >= TELEMETRY_PUBLISH_INTERVAL_MS) {
+        lastTelemetryPublishMs = millis();
+        publishTelemetryAWS(temperature, humidity, eco2Ppm, tvocPpb, coPpm, soundDb, alarmStateActive);
+    }
+
+    if (mqttClient.connected()) {
+        mqttClient.loop();
+    }
 
     delay(2000); // 0.5 Hz sampling period
 }

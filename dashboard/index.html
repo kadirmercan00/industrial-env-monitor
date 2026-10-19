@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MERCAN STUDIO — Industrial Multi-Gas & Environmental SCADA Monitor</title>
+  <meta name="description" content="Industrial Environmental, Multi-Gas & Acoustic SCADA Operations Portal powered by ESP32, Sensirion SHT35, ScioSense CCS811, and AWS IoT Core Serverless Pipeline.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body class="theme-dark">
+
+  <!-- ==================== TOP NAVIGATION BAR ==================== -->
+  <header class="scada-header">
+    <div class="header-left">
+      <div class="brand-logo">
+        <span class="logo-pulse"></span>
+        <div class="brand-text">
+          <span class="brand-title">MERCAN STUDIO</span>
+          <span class="brand-sub">INDUSTRIAL SCADA & TELEMETRY SUITE</span>
+        </div>
+      </div>
+      <div class="header-divider"></div>
+      <div class="plant-selector">
+        <span class="facility-badge">PLANT_01</span>
+        <span class="station-id">STATION: <strong>ENV_STATION_001</strong></span>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <div class="system-health">
+        <div class="status-indicator nominal" id="systemStatusDot"></div>
+        <span class="status-text" id="systemStatusText">SYSTEM NOMINAL</span>
+      </div>
+      <div class="header-divider"></div>
+      <div class="source-toggle">
+        <label class="switch-label">DATA SOURCE:</label>
+        <button id="toggleSimBtn" class="mode-btn active" onclick="toggleSimulation()">
+          <span class="icon">⚡</span> LIVE EMULATOR
+        </button>
+        <button id="toggleAwsBtn" class="mode-btn" onclick="openAwsModal()">
+          <span class="icon">☁️</span> AWS CONNECT
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==================== MAIN SCADA CONTAINER ==================== -->
+  <main class="scada-container">
+
+    <!-- ALARM BANNER (Visible on threshold breach) -->
+    <div id="alarmBanner" class="alarm-banner hidden">
+      <div class="alarm-icon">⚠️</div>
+      <div class="alarm-content">
+        <strong id="alarmTitle">OSHA CRITICAL SAFETY ALARM TRIGGERED</strong>
+        <p id="alarmDesc">Elevated Toxic Carbon Monoxide concentration detected on Line A. Emergency ventilation protocol engaged.</p>
+      </div>
+      <button class="btn-dismiss-alarm" onclick="dismissAlarm()">ACKNOWLEDGE ALARM</button>
+    </div>
+
+    <!-- 01. REAL-TIME METRIC CARDS -->
+    <section class="metrics-grid">
+
+      <!-- CARD 1: Carbon Monoxide (MQ Electrochemical) -->
+      <div class="metric-card" id="cardCo">
+        <div class="card-header">
+          <span class="metric-label">TOXIC GAS (CO)</span>
+          <span class="sensor-tag">ELECTROCHEMICAL ADC</span>
+        </div>
+        <div class="card-body">
+          <div class="value-display">
+            <span class="value-number" id="valCo">1.8</span>
+            <span class="value-unit">PPM</span>
+          </div>
+          <div class="threshold-bar-container">
+            <div class="threshold-bar" id="barCo" style="width: 7%;"></div>
+          </div>
+          <div class="threshold-legend">
+            <span>0 PPM (Clean)</span>
+            <span class="warn-limit">25 PPM (TWA)</span>
+            <span class="danger-limit">50 PPM (OSHA Limit)</span>
+          </div>
+        </div>
+        <div class="card-footer">
+          <span class="sensor-status nominal" id="statusCo">● Safe Exposure Zone</span>
+          <span class="stat-avg">Avg: <strong id="avgCo">1.6</strong></span>
+        </div>
+      </div>
+
+      <!-- CARD 2: Carbon Dioxide Equivalent (CCS811) -->
+      <div class="metric-card" id="cardCo2">
+        <div class="card-header">
+          <span class="metric-label">AIR QUALITY (eCO₂)</span>
+          <span class="sensor-tag">SCIOSENSE CCS811 (I2C)</span>
+        </div>
+        <div class="card-body">
+          <div class="value-display">
+            <span class="value-number" id="valCo2">640</span>
+            <span class="value-unit">PPM</span>
+          </div>
+          <div class="threshold-bar-container">
+            <div class="threshold-bar" id="barCo2" style="width: 25%;"></div>
+          </div>
+          <div class="threshold-legend">
+            <span>400 (Ambient)</span>
+            <span class="warn-limit">1,000 (Ventilate)</span>
+            <span class="danger-limit">2,500 (OSHA Limit)</span>
+          </div>
+        </div>
+        <div class="card-footer">
+          <span class="sensor-status nominal" id="statusCo2">● Normal Ventilation</span>
+          <span class="stat-avg">Peak: <strong id="peakCo2">710</strong></span>
+        </div>
+      </div>
+
+      <!-- CARD 3: Volatile Organic Compounds (TVOC) -->
+      <div class="metric-card" id="cardTvoc">
+        <div class="card-header">
+          <span class="metric-label">TOTAL VOC (TVOC)</span>
+          <span class="sensor-tag">MOX METAL OXIDE</span>
+        </div>
+        <div class="card-body">
+          <div class="value-display">
+            <span class="value-number" id="valTvoc">85</span>
+            <span class="value-unit">PPB</span>
+          </div>
+          <div class="threshold-bar-container">
+            <div class="threshold-bar" id="barTvoc" style="width: 14%;"></div>
+          </div>
+          <div class="threshold-legend">
+            <span>0 (Pristine)</span>
+            <span class="warn-limit">220 (Elevated)</span>
+            <span class="danger-limit">600 (Toxic Limit)</span>
+          </div>
+        </div>
+        <div class="card-footer">
+          <span class="sensor-status nominal" id="statusTvoc">● Acceptable Baseline</span>
+          <span class="stat-avg">Avg: <strong id="avgTvoc">92</strong></span>
+        </div>
+      </div>
+
+      <!-- CARD 4: Acoustic Noise Pollution -->
+      <div class="metric-card" id="cardSound">
+        <div class="card-header">
+          <span class="metric-label">ACOUSTIC NOISE</span>
+          <span class="sensor-tag">P-P ANALOG MIC</span>
+        </div>
+        <div class="card-body">
+          <div class="value-display">
+            <span class="value-number" id="valSound">68.2</span>
+            <span class="value-unit">dBA</span>
+          </div>
+          <div class="threshold-bar-container">
+            <div class="threshold-bar" id="barSound" style="width: 55%;"></div>
+          </div>
+          <div class="threshold-legend">
+            <span>40 dB (Office)</span>
+            <span class="warn-limit">85 dB (Action Level)</span>
+            <span class="danger-limit">90 dB (Ear Defense)</span>
+          </div>
+        </div>
+        <div class="card-footer">
+          <span class="sensor-status nominal" id="statusSound">● Safe Ambient Noise</span>
+          <span class="stat-avg">Peak: <strong id="peakSound">76.4</strong></span>
+        </div>
+      </div>
+
+      <!-- CARD 5: Ambient Temperature (Sensirion SHT35) -->
+      <div class="metric-card" id="cardTemp">
+        <div class="card-header">
+          <span class="metric-label">TEMPERATURE</span>
+          <span class="sensor-tag">SENSIRION SHT35 (CRC-8)</span>
+        </div>
+        <div class="card-body">
+          <div class="value-display">
+            <span class="value-number" id="valTemp">23.8</span>
+            <span class="value-unit">°C</span>
+          </div>
+          <div class="climate-subline">
+            <span>Target: 22.0 °C</span>
+            <span>Delta: +1.8 °C</span>
+          </div>
+        </div>
+        <div class="card-footer">
+          <span class="sensor-status nominal">● High Precision ±0.1°C</span>
+          <span>Max: <strong>50.0°C</strong></span>
+        </div>
+      </div>
+
+      <!-- CARD 6: Relative Humidity (Sensirion SHT35) -->
+      <div class="metric-card" id="cardHum">
+        <div class="card-header">
+          <span class="metric-label">RELATIVE HUMIDITY</span>
+          <span class="sensor-tag">SENSIRION SHT35 (0x44)</span>
+        </div>
+        <div class="card-body">
+          <div class="value-display">
+            <span class="value-number" id="valHum">47.4</span>
+            <span class="value-unit">%RH</span>
+          </div>
+          <div class="climate-subline">
+            <span>Dew Point: 12.1 °C</span>
+            <span>Condensation: None</span>
+          </div>
+        </div>
+        <div class="card-footer">
+          <span class="sensor-status nominal">● Optimal RH Band</span>
+          <span>Limit: <strong>80% RH</strong></span>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- 02. REAL-TIME CHARTS SECTION -->
+    <section class="charts-layout">
+
+      <!-- LEFT: Multi-Gas Concentration Trends -->
+      <div class="chart-panel main-panel">
+        <div class="panel-header">
+          <div class="panel-title-group">
+            <h3>Multi-Gas Concentration Dynamics (Time-Series)</h3>
+            <span class="panel-subtitle">Rolling 60-sample telemetry buffer • AWS IoT Core MQTT 5s ingest stream</span>
+          </div>
+          <div class="panel-actions">
+            <button class="action-pill" onclick="injectGasSpike()">⚡ Inject Gas Spike Test</button>
+            <button class="action-pill" onclick="resetTelemetryBuffer()">↺ Reset View</button>
+          </div>
+        </div>
+        <div class="chart-wrapper">
+          <canvas id="gasChart"></canvas>
+        </div>
+      </div>
+
+      <!-- RIGHT: Acoustic Noise & Climate -->
+      <div class="chart-panel side-panel">
+        <div class="panel-header">
+          <div class="panel-title-group">
+            <h3>Acoustic Exposure vs OSHA 85 dBA Action Limit</h3>
+            <span class="panel-subtitle">Noise dosimetry & microclimate telemetry</span>
+          </div>
+        </div>
+        <div class="chart-wrapper">
+          <canvas id="soundChart"></canvas>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- 03. EDGE HARDWARE & AWS ARCHITECTURE AUDIT -->
+    <section class="audit-section">
+
+      <!-- Column 1: Hardware Subsystem Status -->
+      <div class="audit-card">
+        <div class="audit-header">
+          <h4>Edge Station Hardware Peripherals</h4>
+          <span class="badge-sub">ESP32-WROOM-32 @ 240 MHz</span>
+        </div>
+        <ul class="audit-list">
+          <li>
+            <span class="item-name">Sensirion SHT35 Precision Sensor:</span>
+            <span class="item-val ok">I2C (0x44) • CRC-8 Verified</span>
+          </li>
+          <li>
+            <span class="item-name">ScioSense CCS811 Gas Sensor:</span>
+            <span class="item-val ok">I2C (0x5A) • 100 Hz Mode</span>
+          </li>
+          <li>
+            <span class="item-name">Electrochemical CO Analog Front-End:</span>
+            <span class="item-val ok">ADC GPIO 32 • Discrete Moving Avg</span>
+          </li>
+          <li>
+            <span class="item-name">SPI MicroSD Black-Box Datalogger:</span>
+            <span class="item-val ok">FAT32 CSV Ready (16 GB)</span>
+          </li>
+          <li>
+            <span class="item-name">Time Synchronization:</span>
+            <span class="item-val ok">SNTP pool.ntp.org (UTC+3)</span>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Column 2: AWS Serverless Cloud Telemetry State -->
+      <div class="audit-card">
+        <div class="audit-header">
+          <h4>AWS Serverless Cloud Telemetry</h4>
+          <span class="badge-sub">Mutual TLS 1.2 x.509</span>
+        </div>
+        <ul class="audit-list">
+          <li>
+            <span class="item-name">MQTT Broker Endpoint:</span>
+            <span class="item-val mono">a3xxxxxxxx-ats.iot.eu-central-1.amazonaws.com</span>
+          </li>
+          <li>
+            <span class="item-name">Ingest Topic:</span>
+            <span class="item-val mono">industrial/env/PLANT_01/ENV_STATION_001/telemetry</span>
+          </li>
+          <li>
+            <span class="item-name">AWS IoT Topic Rule:</span>
+            <span class="item-val ok">SELECT * FROM 'industrial/env/+/+/telemetry'</span>
+          </li>
+          <li>
+            <span class="item-name">Amazon DynamoDB Tables:</span>
+            <span class="item-val ok">IndustrialEnv_Telemetry (30d TTL)</span>
+          </li>
+          <li>
+            <span class="item-name">Cold Storage Archive:</span>
+            <span class="item-val ok">s3://industrial-env-telemetry-archive/</span>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Column 3: Live Incident & Ingestion Log -->
+      <div class="audit-card log-card">
+        <div class="audit-header">
+          <h4>Live Telemetry & Safety Event Log</h4>
+          <span class="log-count" id="logCount">0 events</span>
+        </div>
+        <div class="log-stream" id="eventLogStream">
+          <!-- Dynamically populated via JS -->
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- ==================== AWS CONFIGURATION MODAL ==================== -->
+  <div id="awsModal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Connect to Live AWS IoT Core / API Gateway</h3>
+        <button class="modal-close" onclick="closeAwsModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <p>You can connect this SCADA dashboard directly to your live AWS REST API Gateway endpoint or WebSocket broker:</p>
+        <div class="form-group">
+          <label>AWS API Gateway / WebSocket URL:</label>
+          <input type="text" id="awsApiUrl" placeholder="https://xxxxxxxx.execute-api.eu-central-1.amazonaws.com/prod/telemetry" value="">
+        </div>
+        <div class="form-group">
+          <label>Plant Facility ID:</label>
+          <input type="text" id="awsFacilityId" value="PLANT_01">
+        </div>
+        <div class="form-group">
+          <label>Station Device ID:</label>
+          <input type="text" id="awsStationId" value="ENV_STATION_001">
+        </div>
+        <div class="modal-tip">
+          💡 When live AWS connection is enabled, the dashboard requests real DynamoDB time-series records via API Gateway. When disabled, the high-fidelity industrial hardware emulator runs locally in your browser.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeAwsModal()">Cancel</button>
+        <button class="btn-primary" onclick="saveAwsConfig()">Apply & Connect</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCRIPT -->
+  <script src="js/app.js"></script>
+</body>
+</html>

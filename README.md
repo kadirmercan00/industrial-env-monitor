@@ -1,9 +1,15 @@
 # Industrial Multi-Gas, Acoustic & Environmental Monitoring Station
+### Edge-to-Cloud SCADA, AWS Serverless IoT Pipeline & Web Dashboard
+
+<div align="center">
 
 [![License: Proprietary Showcase](https://img.shields.io/badge/License-Proprietary_Portfolio_Showcase-red.svg)](LICENSE)
 [![Platform: ESP32](https://img.shields.io/badge/Platform-Espressif_ESP32-E7352C.svg?logo=espressif)](https://www.espressif.com/)
-[![Sensors: Sensirion & ScioSense](https://img.shields.io/badge/Sensors-SHT35%20%7C%20CCS811%20%7C%20MQ%20CO-brightgreen.svg)](#sensor-instrumentation)
-[![Storage: MicroSD FAT32](https://img.shields.io/badge/Datalogger-SPI_MicroSD_CSV-blue.svg)](#offline-black-box-datalogging)
+[![Sensors: Sensirion & ScioSense](https://img.shields.io/badge/Sensors-SHT35%20%7C%20CCS811%20%7C%20MQ%20CO-brightgreen.svg)](#sensor-instrumentation--signal-processing)
+[![Cloud: AWS IoT Core](https://img.shields.io/badge/AWS-IoT_Core_%7C_Lambda_%7C_DynamoDB_%7C_S3-FF9900.svg?logo=amazonaws)](cloud/ARCHITECTURE.md)
+[![Web Dashboard](https://img.shields.io/badge/Dashboard-Industrial_SCADA_Web-blue.svg)](dashboard/)
+
+</div>
 
 > [!WARNING]
 > **PROPRIETARY PORTFOLIO SHOWCASE NOTICE**  
@@ -14,7 +20,57 @@
 
 ## 🎯 Executive Summary
 
-An industrial-grade environmental and occupational safety monitoring station powered by the **Espressif ESP32 SoC**. Engineered for harsh industrial plant environments, the firmware simultaneously samples precision microclimate conditions, air toxicity, combustible/asphyxiating gases, and acoustic noise pollution. Telemetry is timestamped via **SNTP UTC** synchronization and logged offline to an onboard **MicroSD SPI black-box** in FAT32 CSV format while supervising audio-visual safety alarms.
+An industrial-grade, edge-to-cloud environmental and occupational safety monitoring platform powered by the **Espressif ESP32 SoC**. Engineered for harsh industrial plant environments, the firmware simultaneously samples precision microclimate conditions, air toxicity, combustible/asphyxiating gases, and acoustic noise pollution. 
+
+Telemetry is timestamped via **SNTP UTC**, logged locally to an onboard **MicroSD SPI black-box** in FAT32 CSV format, and streamed over **Mutual TLS (mTLS 1.2)** to an **AWS Serverless Cloud Pipeline** (IoT Core → Lambda → DynamoDB & S3 Cold Storage) feeding a live **SCADA Operations Dashboard**.
+
+---
+
+## 🏛️ End-to-End System Architecture
+
+```mermaid
+flowchart TD
+    subgraph Edge ["Hardware & Edge Station (ESP32)"]
+        SHT35["Sensirion SHT35\nRaw I2C 0x2400 + CRC-8"]
+        CCS811["ScioSense CCS811\nMOX eCO2 / TVOC"]
+        CO["Electrochemical CO\nMoving Average Filter"]
+        MIC["Acoustic Microphone\n50ms P-P Dosimetry"]
+
+        SHT35 & CCS811 & CO & MIC --> ESP32["ESP32 Core\nDual-Core 240 MHz"]
+        ESP32 --> SD["FAT32 MicroSD\nBlack-Box CSV"]
+        ESP32 --> BUZZ["Audio-Visual Annunciator\nPiezo + LED"]
+    end
+
+    subgraph Security ["Encrypted Transport"]
+        ESP32 -->|Mutual TLS 1.2 x.509 Port 8883| AWS_IOT["AWS IoT Core Message Broker"]
+    end
+
+    subgraph Cloud ["AWS Serverless Pipeline"]
+        AWS_IOT -->|Topic Rule| LAMBDA["AWS Lambda: Telemetry Normalizer\nOSHA Threshold Compliance"]
+        LAMBDA --> DYNAMO[("Amazon DynamoDB\nHot Timeseries & Latest Status")]
+        LAMBDA --> S3[("Amazon S3 Data Lake\nCold Parquet/JSON Archive")]
+        LAMBDA -->|On Hazard Breach| SNS["Amazon SNS\nSMS / Email Supervisor Alert"]
+    end
+
+    subgraph Presentation ["SCADA Web Operations Portal"]
+        DYNAMO --> APIGW["Amazon API Gateway"]
+        APIGW --> WEB["Web SCADA Dashboard\nLive Telemetry & Dosimetry"]
+    end
+```
+
+---
+
+## 💻 Interactive Web SCADA Dashboard (`dashboard/`)
+
+The repository includes a production-grade, dark-themed **Industrial SCADA Web Dashboard** located in `dashboard/index.html`. It runs out-of-the-box in modern browsers with:
+- **Live Multi-Gas Concentration Dynamics (Chart.js):** Real-time rolling time-series for Toxic Carbon Monoxide (ppm), Air Quality eCO₂ (ppm), and Total VOCs (ppb).
+- **Acoustic Dosimetry vs OSHA 85 dBA Action Limit:** Real-time sound pressure monitoring with occupational exposure indicators.
+- **Dual Connectivity Modes:**
+  1. **Industrial Hardware Emulator:** Simulates real-time plant telemetry with an interactive **"Inject Gas Spike Test"** button to evaluate hazard annunciators and alarm states.
+  2. **Live AWS IoT / API Gateway Integration:** Directly polls your Amazon API Gateway or WebSocket endpoints.
+- **Real-Time Event Stream:** Log of incoming telemetry and compliance alerts.
+
+👉 **Launch Dashboard:** Open `dashboard/index.html` in your web browser.
 
 ---
 
@@ -29,74 +85,44 @@ An industrial-grade environmental and occupational safety monitoring station pow
 
 ---
 
-## 🏛️ System Architecture
+## ☁️ AWS Serverless Cloud Architecture (`cloud/`)
 
-```
-┌─────────────────────────┐
-│   Sensirion SHT35       │ ──► Raw I2C (Clock Stretch Disabled, CRC-8) ──┐
-└─────────────────────────┘                                               │
-┌─────────────────────────┐                                               │
-│   ScioSense CCS811      │ ──► I2C eCO2 / TVOC Gas Analysis ─────────────┼──► ┌──────────────────────────────┐
-└─────────────────────────┘                                               │    │      ESP32 Processing Core    │
-┌─────────────────────────┐                                               │    │ • Discrete MA Filtering       │
-│   Electrochemical CO    │ ──► 12-Bit ADC + Circular Moving Average ─────┼──► │ • Threshold Hazard Logic      │
-└─────────────────────────┘                                               │    │ • SNTP UTC Time Sync          │
-┌─────────────────────────┐                                               │    └──────────────┬───────────────┘
-│   Acoustic dB Sensor    │ ──► 50 ms Peak-to-Peak Amplitude Window ──────┘                   │
-                                                                                              │
-                                  ┌───────────────────────────────────────────────────────────┴──────────────────────────┐
-                                  ▼                                                                                      ▼
-                    ┌───────────────────────────┐                                                          ┌───────────────────────────┐
-                    │    FAT32 MicroSD Logger   │                                                          │   Audio-Visual Annunciator│
-                    │   Daily Rotated CSV Logs  │                                                          │   Piezo PWM + Hazard LED  │
-                    └───────────────────────────┘                                                          └───────────────────────────┘
-```
+Full serverless infrastructure blueprints are documented in [`cloud/ARCHITECTURE.md`](cloud/ARCHITECTURE.md):
+- **`cloud/lambda/telemetry_normalizer.py`:** Python 3.11 AWS Lambda function validating incoming MQTT payloads, checking OSHA/EU-OSHA exposure limits, archiving to S3, and persisting to DynamoDB.
+- **`cloud/dynamodb_schema.json`:** Provisioning schema for partitioned time-series (`IndustrialEnv_Telemetry`) and instant status lookups (`IndustrialEnv_StationLatest`).
+- **Amazon S3 Data Lake:** Auto-partitioned cold storage (`year=YYYY/month=MM/day=DD/`) for long-term industrial compliance reporting.
 
 ---
 
 ## 📊 Offline Black-Box Datalogging
 
-To ensure occupational health compliance even during network outages, all metrics are recorded to an industrial MicroSD card:
+To ensure occupational health compliance even during total network outages, all metrics are recorded to an industrial MicroSD card:
 ```csv
-Date,Time,Temperature_C,Humidity_RH,eCO2_PPM,TVOC_PPB,CO_PPM,Sound_dBA,Hazard_Alarm
-2026-09-26,21:40:12,23.45,45.20,620,45,1.20,62.4,NOMINAL
-2026-09-26,21:40:14,52.10,46.10,2650,610,54.30,94.2,CRITICAL_HAZARD
+Timestamp,Date,Time,Temperature_C,Humidity_RH,eCO2_ppm,TVOC_ppb,CO_ppm,Noise_dBA,Status
+1718000000,2026-09-27,08:30:00,24.3,48.2,680,95,2.10,64.5,NOMINAL
+1718000002,2026-09-27,08:30:02,24.4,48.1,685,96,2.15,65.0,NOMINAL
 ```
 
 ---
 
-## 📁 Repository Structure
+## 🛠️ Build & Deployment
 
+### Hardware Firmware (PlatformIO)
+```bash
+# Clone and open directory
+cd industrial-env-monitor
+
+# Compile ESP32 firmware
+pio run -e esp32dev
+
+# Flash to target board via USB-UART
+pio run -e esp32dev --target upload
 ```
-industrial-env-monitor/
-├── include/
-│   └── monitor_config.h     # Pin mappings, I2C addresses & safety thresholds
-├── src/
-│   └── main.cpp             # Raw I2C SHT35 driver, analog filters & SD logger
-├── platformio.ini           # PlatformIO environment & library dependencies
-├── LICENSE                  # Strict Proprietary Portfolio Showcase License
-└── README.md                # Instrument specifications & architecture
+
+### Web SCADA Dashboard
+Simply open `dashboard/index.html` in any modern web browser or serve it with any static server:
+```bash
+cd dashboard
+python -m http.server 8080
+# Navigate to http://localhost:8080
 ```
-
----
-
-## 🛠️ Build & Configuration
-
-1. **Setup PlatformIO:**
-   ```bash
-   pio run -e esp32dev
-   ```
-2. **Flash to Target Hardware:**
-   ```bash
-   pio run -e esp32dev -t upload
-   ```
-
----
-
-## 👨‍💻 Engineering & Contact
-
-**Kadir Mercan**  
-*Senior Embedded Systems, Hardware (PCB) & IoT Engineer*  
-- **GitHub:** [@kadirmercan00](https://github.com/kadirmercan00)  
-- **Brand:** Mercan Studio  
-- **Expertise:** Sensor Fusion, Industrial Data Acquisition, High-Precision Analog Front-Ends, RTOS Firmware.

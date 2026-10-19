@@ -1,0 +1,70 @@
+{
+  "Tables": [
+    {
+      "TableName": "IndustrialEnv_Telemetry",
+      "BillingMode": "PAY_PER_REQUEST",
+      "AttributeDefinitions": [
+        {
+          "AttributeName": "station_id",
+          "AttributeType": "S"
+        },
+        {
+          "AttributeName": "timestamp",
+          "AttributeType": "N"
+        },
+        {
+          "AttributeName": "facility_id",
+          "AttributeType": "S"
+        }
+      ],
+      "KeySchema": [
+        {
+          "AttributeName": "station_id",
+          "KeyType": "HASH"
+        },
+        {
+          "AttributeName": "timestamp",
+          "KeyType": "RANGE"
+        }
+      ],
+      "GlobalSecondaryIndexes": [
+        {
+          "IndexName": "FacilityTimestampIndex",
+          "KeySchema": [
+            {
+              "AttributeName": "facility_id",
+              "KeyType": "HASH"
+            },
+            {
+              "AttributeName": "timestamp",
+              "KeyType": "RANGE"
+            }
+          ],
+          "Projection": {
+            "ProjectionType": "ALL"
+          }
+        }
+      ],
+      "TimeToLiveSpecification": {
+        "AttributeName": "ttl_expire",
+        "Enabled": true
+      }
+    },
+    {
+      "TableName": "IndustrialEnv_StationLatest",
+      "BillingMode": "PAY_PER_REQUEST",
+      "AttributeDefinitions": [
+        {
+          "AttributeName": "station_id",
+          "AttributeType": "S"
+        }
+      ],
+      "KeySchema": [
+        {
+          "AttributeName": "station_id",
+          "KeyType": "HASH"
+        }
+      ]
+    }
+  ]
+}

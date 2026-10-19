@@ -31,5 +31,21 @@
 // ==================== SAMPLING & FILTERING ====================
 #define CO_MOVING_AVG_SAMPLES       5
 #define SOUND_SAMPLE_WINDOW_MS      50
+#define TELEMETRY_PUBLISH_INTERVAL_MS 5000  ///< 5-second cloud streaming interval
+
+// ==================== DEVICE IDENTITY & AWS IOT CORE ====================
+#define FIRMWARE_VERSION            "v2.1.0-aws-iot"
+#define FACILITY_ID                 "PLANT_01"
+#define STATION_ID                  "ENV_STATION_001"
+
+#define AWS_IOT_ENDPOINT            "xxxxxxxxxxxxxx-ats.iot.eu-central-1.amazonaws.com"
+#define AWS_IOT_PORT                8883
+#define MQTT_KEEPALIVE_SEC          60
+#define MQTT_BUFFER_SIZE            1024
+
+// Topic format: industrial/env/{facility}/{station}/{channel}
+#define MQTT_TOPIC_TELEMETRY        "industrial/env/" FACILITY_ID "/" STATION_ID "/telemetry"
+#define MQTT_TOPIC_ALERT            "industrial/env/" FACILITY_ID "/" STATION_ID "/alert"
+#define MQTT_TOPIC_STATUS           "industrial/env/" FACILITY_ID "/" STATION_ID "/status"
 
 #endif // MONITOR_CONFIG_H
