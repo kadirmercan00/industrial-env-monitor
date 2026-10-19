@@ -36,20 +36,23 @@ flowchart TD
         CO["Electrochemical CO\nMoving Average Filter"]
         MIC["Acoustic Microphone\n50ms P-P Dosimetry"]
 
-        SHT35 & CCS811 & CO & MIC --> ESP32["ESP32 Core\nDual-Core 240 MHz"]
+        SHT35 --> ESP32["ESP32 Core\nDual-Core 240 MHz"]
+        CCS811 --> ESP32
+        CO --> ESP32
+        MIC --> ESP32
         ESP32 --> SD["FAT32 MicroSD\nBlack-Box CSV"]
         ESP32 --> BUZZ["Audio-Visual Annunciator\nPiezo + LED"]
     end
 
     subgraph Security ["Encrypted Transport"]
-        ESP32 -->|Mutual TLS 1.2 x.509 Port 8883| AWS_IOT["AWS IoT Core Message Broker"]
+        ESP32 -->|"Mutual TLS 1.2 x.509 (Port 8883)"| AWS_IOT["AWS IoT Core Message Broker"]
     end
 
     subgraph Cloud ["AWS Serverless Pipeline"]
-        AWS_IOT -->|Topic Rule| LAMBDA["AWS Lambda: Telemetry Normalizer\nOSHA Threshold Compliance"]
+        AWS_IOT -->|"Topic Rule"| LAMBDA["AWS Lambda: Telemetry Normalizer\nOSHA Threshold Compliance"]
         LAMBDA --> DYNAMO[("Amazon DynamoDB\nHot Timeseries & Latest Status")]
         LAMBDA --> S3[("Amazon S3 Data Lake\nCold Parquet/JSON Archive")]
-        LAMBDA -->|On Hazard Breach| SNS["Amazon SNS\nSMS / Email Supervisor Alert"]
+        LAMBDA -->|"On Hazard Breach"| SNS["Amazon SNS\nSMS / Email Supervisor Alert"]
     end
 
     subgraph Presentation ["SCADA Web Operations Portal"]

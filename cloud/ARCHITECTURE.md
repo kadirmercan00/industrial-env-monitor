@@ -15,31 +15,35 @@ flowchart TD
         CO["MQ Electrochemical CO (ADC)"]
         MIC["Acoustic dB Microphone (ADC)"]
         
-        SHT35 & CCS811 & CO & MIC --> ESP32
+        SHT35 --> ESP32
+        CCS811 --> ESP32
+        CO --> ESP32
+        MIC --> ESP32
     end
 
     subgraph Security ["Transport Security"]
-        ESP32 -->|Mutual TLS 1.2 x.509 Port 8883| AWS_IOT["AWS IoT Core Message Broker"]
+        ESP32 -->|"Mutual TLS 1.2 x.509 (Port 8883)"| AWS_IOT["AWS IoT Core Message Broker"]
     end
 
     subgraph Rules ["IoT Topic Rules Engine"]
-        AWS_IOT -->|Topic: industrial/env/+/+/telemetry| RULE1["Topic Rule: Telemetry Forwarder"]
-        AWS_IOT -->|Topic: industrial/env/+/+/alert| RULE2["Topic Rule: Emergency Dispatcher"]
+        AWS_IOT -->|"Topic: industrial/env/+/telemetry"| RULE1["Topic Rule: Telemetry Forwarder"]
+        AWS_IOT -->|"Topic: industrial/env/+/alert"| RULE2["Topic Rule: Emergency Dispatcher"]
     end
 
     subgraph Serverless ["Processing & Ingestion Layer"]
-        RULE1 -->|JSON Event Trigger| LAMBDA["AWS Lambda: Telemetry Normalizer"]
-        RULE2 -->|Instant Push| SNS_EMERGENCY["Amazon SNS: SMS / Email Emergency Alert"]
+        RULE1 -->|"JSON Event Trigger"| LAMBDA["AWS Lambda: Telemetry Normalizer"]
+        RULE2 -->|"Instant Push"| SNS_EMERGENCY["Amazon SNS: SMS / Email Emergency Alert"]
     end
 
     subgraph Storage ["Enterprise Persistence"]
-        LAMBDA -->|PutItem Partitioned| DYNAMO_TS[("Amazon DynamoDB\nIndustrialEnv_Telemetry (30-day TTL)")]
-        LAMBDA -->|Upsert Key: station_id| DYNAMO_LATEST[("Amazon DynamoDB\nIndustrialEnv_StationLatest")]
-        LAMBDA -->|Partition: YYYY/MM/DD| S3_COLD[("Amazon S3 Data Lake\ns3://industrial-env-telemetry-archive/")]
+        LAMBDA -->|"PutItem Partitioned"| DYNAMO_TS[("Amazon DynamoDB\nIndustrialEnv_Telemetry (30-day TTL)")]
+        LAMBDA -->|"Upsert Key: station_id"| DYNAMO_LATEST[("Amazon DynamoDB\nIndustrialEnv_StationLatest")]
+        LAMBDA -->|"Partition: YYYY/MM/DD"| S3_COLD[("Amazon S3 Data Lake\ns3://industrial-env-telemetry-archive/")]
     end
 
     subgraph Presentation ["Presentation & SCADA"]
-        DYNAMO_LATEST & DYNAMO_TS -->|REST / WebSocket| APIGW["Amazon API Gateway"]
+        DYNAMO_LATEST --> APIGW["Amazon API Gateway"]
+        DYNAMO_TS --> APIGW
         APIGW --> WEB["Industrial SCADA Web Dashboard"]
     end
 ```
