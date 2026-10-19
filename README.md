@@ -31,33 +31,33 @@ Telemetry is timestamped via **SNTP UTC**, logged locally to an onboard **MicroS
 ```mermaid
 flowchart TD
     subgraph Edge ["Hardware & Edge Station (ESP32)"]
-        SHT35["Sensirion SHT35\nRaw I2C 0x2400 + CRC-8"]
-        CCS811["ScioSense CCS811\nMOX eCO2 / TVOC"]
-        CO["Electrochemical CO\nMoving Average Filter"]
-        MIC["Acoustic Microphone\n50ms P-P Dosimetry"]
+        SHT35["Sensirion SHT35<br/>Raw I2C 0x2400 + CRC-8"]
+        CCS811["ScioSense CCS811<br/>MOX eCO2 / TVOC"]
+        CO["Electrochemical CO<br/>Moving Average Filter"]
+        MIC["Acoustic Microphone<br/>50ms P-P Dosimetry"]
 
-        SHT35 --> ESP32["ESP32 Core\nDual-Core 240 MHz"]
+        SHT35 --> ESP32["ESP32 Core<br/>Dual-Core 240 MHz"]
         CCS811 --> ESP32
         CO --> ESP32
         MIC --> ESP32
-        ESP32 --> SD["FAT32 MicroSD\nBlack-Box CSV"]
-        ESP32 --> BUZZ["Audio-Visual Annunciator\nPiezo + LED"]
+        ESP32 --> SD["FAT32 MicroSD<br/>Black-Box CSV"]
+        ESP32 --> BUZZ["Audio-Visual Annunciator<br/>Piezo + LED"]
     end
 
     subgraph Security ["Encrypted Transport"]
-        ESP32 -->|"Mutual TLS 1.2 x.509 (Port 8883)"| AWS_IOT["AWS IoT Core Message Broker"]
+        ESP32 -->|"Mutual TLS 1.2 x.509"| AWS_IOT["AWS IoT Core Message Broker"]
     end
 
     subgraph Cloud ["AWS Serverless Pipeline"]
-        AWS_IOT -->|"Topic Rule"| LAMBDA["AWS Lambda: Telemetry Normalizer\nOSHA Threshold Compliance"]
-        LAMBDA --> DYNAMO[("Amazon DynamoDB\nHot Timeseries & Latest Status")]
-        LAMBDA --> S3[("Amazon S3 Data Lake\nCold Parquet/JSON Archive")]
-        LAMBDA -->|"On Hazard Breach"| SNS["Amazon SNS\nSMS / Email Supervisor Alert"]
+        AWS_IOT -->|"Topic Rule"| LAMBDA["AWS Lambda: Telemetry Normalizer<br/>OSHA Threshold Compliance"]
+        LAMBDA --> DYNAMO["Amazon DynamoDB<br/>Hot Timeseries & Latest Status"]
+        LAMBDA --> S3["Amazon S3 Data Lake<br/>Cold Parquet/JSON Archive"]
+        LAMBDA -->|"On Hazard Breach"| SNS["Amazon SNS<br/>SMS / Email Supervisor Alert"]
     end
 
     subgraph Presentation ["SCADA Web Operations Portal"]
         DYNAMO --> APIGW["Amazon API Gateway"]
-        APIGW --> WEB["Web SCADA Dashboard\nLive Telemetry & Dosimetry"]
+        APIGW --> WEB["Web SCADA Dashboard<br/>Live Telemetry & Dosimetry"]
     end
 ```
 

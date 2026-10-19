@@ -22,7 +22,7 @@ flowchart TD
     end
 
     subgraph Security ["Transport Security"]
-        ESP32 -->|"Mutual TLS 1.2 x.509 (Port 8883)"| AWS_IOT["AWS IoT Core Message Broker"]
+        ESP32 -->|"Mutual TLS 1.2 x.509"| AWS_IOT["AWS IoT Core Message Broker"]
     end
 
     subgraph Rules ["IoT Topic Rules Engine"]
@@ -36,9 +36,9 @@ flowchart TD
     end
 
     subgraph Storage ["Enterprise Persistence"]
-        LAMBDA -->|"PutItem Partitioned"| DYNAMO_TS[("Amazon DynamoDB\nIndustrialEnv_Telemetry (30-day TTL)")]
-        LAMBDA -->|"Upsert Key: station_id"| DYNAMO_LATEST[("Amazon DynamoDB\nIndustrialEnv_StationLatest")]
-        LAMBDA -->|"Partition: YYYY/MM/DD"| S3_COLD[("Amazon S3 Data Lake\ns3://industrial-env-telemetry-archive/")]
+        LAMBDA -->|"PutItem Partitioned"| DYNAMO_TS["Amazon DynamoDB<br/>IndustrialEnv_Telemetry (30-day TTL)"]
+        LAMBDA -->|"Upsert Key: station_id"| DYNAMO_LATEST["Amazon DynamoDB<br/>IndustrialEnv_StationLatest"]
+        LAMBDA -->|"Partition: YYYY/MM/DD"| S3_COLD["Amazon S3 Data Lake<br/>s3://industrial-env-telemetry-archive/"]
     end
 
     subgraph Presentation ["Presentation & SCADA"]
